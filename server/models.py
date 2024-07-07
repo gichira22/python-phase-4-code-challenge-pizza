@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
-from sqlalchemy.orm import validates
+from sqlalchemy.orm import validates, relationships
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy_serializer import SerializerMixin
 
@@ -20,9 +20,13 @@ class Restaurant(db.Model, SerializerMixin):
     name = db.Column(db.String)
     address = db.Column(db.String)
 
-    # add relationship
+    # add relationship    
+    restaurant_pizzas = relationship('RestaurantPizza', back_populates='restaurant', cascade='all, delete-orphan')
+    pizzas = association_proxy('restaurant_pizzas', 'pizza')
 
     # add serialization rules
+    serialize_rules = ('-restaurant_pizzas.restaurant',)
+
 
     def __repr__(self):
         return f"<Restaurant {self.name}>"
