@@ -24,6 +24,55 @@ api = Api(app)
 def index():
     return "<h1>Code challenge</h1>"
 
+class Restaurants(Resource):
+    def get(self):
+        restaurants = Restaurant.query.all()
+        return jsonify([restaurant.to_dict() for restaurant in restaurants])
+
+
+class RestaurantById(Resource):
+    def get(self, id):
+        restaurant = Restaurant.query.get(id)
+        if not restaurant:
+            return jsonify({"error": "Restaurant not found"}), 404
+        return jsonify(restaurant.to_dict(include_pizzas=True))
+
+    def delete(self, id):
+        restaurant = Restaurant.query.get(id)
+        if not restaurant:
+            return jsonify({"error": "Restaurant not found"}), 404
+        db.session.delete(restaurant)
+        db.session.commit()
+        return '', 204
+
+
+class Pizzas(Resource):
+    def get(self):
+        pizzas = Pizza.query.all()
+        return jsonify([pizza.to_dict() for pizza in pizzas])
+
+
+class RestaurantPizzas(Resource):
+    def post(self):
+        data = request.get_json()
+        try:
+            rp = RestaurantPizza(
+                price=data['price'],
+                pizza_id=data['pizza_id'],
+                restaurant_id=data['restaurant_id']
+            )
+            db.session.add(rp)
+            db.session.commit()
+            return jsonify(rp.to_dict(include_pizza=True, include_restaurant=True)), 201
+        except ValueError as e:
+            return jsonify({"errors": [str(e)]}), 400
+
+
+api.add_resource(Restaurants, '/restaurants')
+api.add_resource(RestaurantById, '/restaurants/<int:id>')
+api.add_resource(Pizzas, '/pizzas')
+api.add_resource(RestaurantPizzas, '/restaurant_pizzas')
+
 
 if __name__ == "__main__":
     app.run(port=5555, debug=True)
