@@ -1,7 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
-from sqlalchemy.orm import validates, relationship
-from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.orm import validates
 from sqlalchemy_serializer import SerializerMixin
 
 metadata = MetaData(
@@ -12,7 +11,6 @@ metadata = MetaData(
 
 db = SQLAlchemy(metadata=metadata)
 
-
 class Restaurant(db.Model, SerializerMixin):
     __tablename__ = "restaurants"
 
@@ -20,27 +18,23 @@ class Restaurant(db.Model, SerializerMixin):
     name = db.Column(db.String)
     address = db.Column(db.String)
 
-    # add relationship    
-    restaurant_pizzas = relationship('RestaurantPizza', back_populates='restaurant', cascade='all, delete-orphan')
-    pizzas = association_proxy('restaurant_pizzas', 'pizza')
+    # add relationship
+    pizzas = db.relationship('RestaurantPizza', back_populates='restaurant', cascade="all, delete-orphan")
 
     # add serialization rules
-    serialize_rules = ('-restaurant_pizzas.restaurant',)
-
+    serialize_rules = ('-pizzas.restaurant',)
 
     def __repr__(self):
         return f"<Restaurant {self.name}>"
-    
-    def to_dict(self, include_pizzas=False):
-        restaurant_dict = {
+
+    def to_dict(self):
+        data = {
             'id': self.id,
             'name': self.name,
             'address': self.address,
+            'restaurant_pizzas': [restaurant_pizza.to_dict(include_restaurant=False) for restaurant_pizza in self.pizzas]
         }
-        if include_pizzas:
-            restaurant_dict['restaurant_pizzas'] = [rp.to_dict(include_pizza=True) for rp in self.restaurant_pizzas]
-        return restaurant_dict
-
+        return data
 
 class Pizza(db.Model, SerializerMixin):
     __tablename__ = "pizzas"
@@ -50,56 +44,55 @@ class Pizza(db.Model, SerializerMixin):
     ingredients = db.Column(db.String)
 
     # add relationship
-    restaurant_pizzas = relationship('RestaurantPizza', back_populates='pizza')
-    restaurants = association_proxy('restaurant_pizzas', 'restaurant')
+    restaurants = db.relationship('RestaurantPizza', back_populates='pizza', cascade="all, delete-orphan")
 
     # add serialization rules
-    serialize_rules = ('-restaurant_pizzas.pizza',)
+    serialize_rules = ('-restaurants.pizza',)
 
     def __repr__(self):
         return f"<Pizza {self.name}, {self.ingredients}>"
 
     def to_dict(self):
-        return {
+        data = {
             'id': self.id,
             'name': self.name,
-            'ingredients': self.ingredients,
+            'ingredients': self.ingredients
         }
+        return data
 
 class RestaurantPizza(db.Model, SerializerMixin):
     __tablename__ = "restaurant_pizzas"
 
     id = db.Column(db.Integer, primary_key=True)
     price = db.Column(db.Integer, nullable=False)
-    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'), nullable=False)
-    pizza_id = db.Column(db.Integer, db.ForeignKey('pizzas.id'), nullable=False)
-    
+    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'))
+    pizza_id = db.Column(db.Integer, db.ForeignKey('pizzas.id'))
+
     # add relationships
-    restaurant = relationship('Restaurant', back_populates='restaurant_pizzas')
-    pizza = relationship('Pizza', back_populates='restaurant_pizzas')
+    restaurant = db.relationship('Restaurant', back_populates='pizzas')
+    pizza = db.relationship('Pizza', back_populates='restaurants')
 
     # add serialization rules
-    serialize_rules = ('-restaurant.restaurant_pizzas', '-pizza.restaurant_pizzas')
+    serialize_rules = ('-restaurant.pizzas', '-pizza.restaurants')
 
     # add validation
     @validates('price')
-    def validate_price(self, key, value):
-        if value < 1 or value > 30:
+    def validate_price(self, key, price):
+        if not (1 <= price <= 30):
             raise ValueError("Price must be between 1 and 30")
-        return value
+        return price
 
     def __repr__(self):
         return f"<RestaurantPizza ${self.price}>"
 
-    def to_dict(self, include_pizza=False, include_restaurant=False):
-        rpizza_dict = {
+    def to_dict(self, include_restaurant=True):
+        data = {
             'id': self.id,
             'price': self.price,
             'pizza_id': self.pizza_id,
-            'restaurant_id': self.restaurant_id,   
+            'restaurant_id': self.restaurant_id,
+            'pizza': self.pizza.to_dict()
         }
-        if include_pizza:
-            rpizza_dict['pizza'] = self.pizza.to_dict()
         if include_restaurant:
-            rpizza_dict['restaurant'] = self.restaurant.to_dict()
-        return rpizza_dict
+            data['restaurant'] = {'id': self.restaurant.id, 'name': self.restaurant.name}
+        return data
